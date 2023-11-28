@@ -36,7 +36,7 @@ Access the APIs of each node server to query data
 
 **4. /mine/start:** To automatically mine a new block from transaction pool after 20 seconds
 
-**5. /consensus:** To reach consensus between nodes in blockchain (handle conflicts between blockchain)
+**5. /consensus:** To reach consensus between nodes in blockchain (handle conflicts between blockchain). This endpoint will be automaticall hit after the mining process done -> Check it by review the blockchain (/chain) after mining process done
 
 **For example:** 
 
