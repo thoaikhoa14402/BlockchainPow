@@ -23,9 +23,13 @@ Access the APIs of each node server to query data
 
 **Endpoint list:**
 **1. /chain:** To get all blocks of blockchain
+
 **2. /transactions:** To get all transactions of blockchain
+
 **3. /mine:** To mine a new block from transaction pool
+
 **4. /mine/start:** To automatically mine a new block from transaction pool after 20 seconds
+
 **5. /consensus:** To reach consensus between nodes in blockchain (handle conflicts between blockchain)
 
 **For example:** 
