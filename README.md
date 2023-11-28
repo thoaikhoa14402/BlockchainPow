@@ -5,6 +5,7 @@ Building Blockchain PoW from scratch with Golang
 Run the node servers on ports 5000, 5001, 5002 and wait for them to peer with each other. 
 
 **For example:**
+
 **Node 1** (Node 1 running on port 5000 needs to peer with nodes running on ports 5001 and 5002). 
 
 (wait for the following array to be printed in the terminal)
@@ -26,6 +27,7 @@ Afterwards, start the wallet server and access it at localhost:8080 to perform s
 Access the APIs of each node server to query data
 
 **Endpoint list:**
+
 **1. /chain:** To get all blocks of blockchain
 
 **2. /transactions:** To get all transactions of blockchain
@@ -37,6 +39,7 @@ Access the APIs of each node server to query data
 **5. /consensus:** To reach consensus between nodes in blockchain (handle conflicts between blockchain)
 
 **For example:** 
+
 **Node 1:** localhost:5000/chain, localhost:5001/transactions, ...
 
 **Node 2:** localhost:5001/chain, localhost:5001/transactions, ...
