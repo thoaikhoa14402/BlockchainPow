@@ -195,7 +195,7 @@ func (bcs *BlockchainServer) Mine(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (bcs *BlockchainServer) StartMine(w http.ResponseWriter, req *http.Request) {
+func (bcs *BlockchainServer) AutoMine(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
 		bc := bcs.GetBlockchain()
@@ -210,12 +210,12 @@ func (bcs *BlockchainServer) StartMine(w http.ResponseWriter, req *http.Request)
 	}
 }
 
-func (bcs *BlockchainServer) Amount(w http.ResponseWriter, req *http.Request) {
+func (bcs *BlockchainServer) GetBalance(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
 		blockchainAddress := req.URL.Query().Get("blockchain_address")
-		amount := bcs.GetBlockchain().CalculateTotalAmount(blockchainAddress)
-		ar := &blockchain.AmountResponse{Amount: amount}
+		balance := bcs.GetBlockchain().CalculateTotalBalance(blockchainAddress)
+		ar := &blockchain.BalanceResponse{Balance: balance}
 		m, _ := ar.MarshalJSON()
 
 		w.Header().Add("Content-Type", "application/json")
@@ -249,8 +249,8 @@ func (bcs *BlockchainServer) Run() {
 	http.HandleFunc("/chain", bcs.GetChain)
 	http.HandleFunc("/transactions", bcs.Transactions)
 	http.HandleFunc("/mine", bcs.Mine)
-	http.HandleFunc("/mine/start", bcs.StartMine)
-	http.HandleFunc("/amount", bcs.Amount)
+	http.HandleFunc("/mine/auto", bcs.AutoMine)
+	http.HandleFunc("/balance", bcs.GetBalance)
 	http.HandleFunc("/consensus", bcs.ReachConsensus)
 	log.Fatal(http.ListenAndServe("0.0.0.0:"+strconv.Itoa(int(bcs.Port())), nil))
 }

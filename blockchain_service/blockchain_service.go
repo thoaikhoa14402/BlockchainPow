@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type BlockchainService struct {
@@ -38,6 +39,11 @@ func (bs *BlockchainService) GetGateway() string {
 func (bs *BlockchainService) CreateTransaction() {
 	if UserProfile.PublicKey == "" || UserProfile.BlockchainAddress == "" || UserProfile.PrivateKey == "" {
 		fmt.Print("\n\nERROR MESSAGE: Please create your wallet first!")
+		return
+	}
+
+	if UserProfile.Balance <= 0 {
+		fmt.Print("\n\nERROR MESSAGE: Your account balance is insufficient!")
 		return
 	}
 
@@ -116,58 +122,10 @@ func (bs *BlockchainService) CreateTransaction() {
 	}
 }
 
-//	func (ws *WalletServer) WalletAmountCli(w http.ResponseWriter, req *http.Request) {
-//		switch req.Method {
-//		case http.MethodGet:
-//			blockchainAddress := req.URL.Query().Get("blockchain_address")
-//			endpoint := fmt.Sprintf("%s/amount", ws.Gateway())
-//
-//			client := &http.Client{}
-//			bcsReq, _ := http.NewRequest("GET", endpoint, nil)
-//			q := bcsReq.URL.Query()
-//			q.Add("blockchain_address", blockchainAddress)
-//			bcsReq.URL.RawQuery = q.Encode()
-//
-//			bcsResp, err := client.Do(bcsReq)
-//			if err != nil {
-//				log.Printf("ERROR: %v", err)
-//				io.WriteString(w, string(utils.JsonStatus("fail")))
-//				return
-//			}
-//
-//			w.Header().Add("Content-Type", "application/json")
-//			if bcsResp.StatusCode == 200 {
-//				decoder := json.NewDecoder(bcsResp.Body)
-//				var bar blockchain.AmountResponse
-//				err := decoder.Decode(&bar)
-//				if err != nil {
-//					log.Printf("ERROR: %v", err)
-//					io.WriteString(w, string(utils.JsonStatus("fail")))
-//					return
-//				}
-//
-//				m, _ := json.Marshal(struct {
-//					Message string  `json:"message"`
-//					Amount  float32 `json:"amount"`
-//				}{
-//					Message: "success",
-//					Amount:  bar.Amount,
-//				})
-//
-//				io.WriteString(w, string(m[:]))
-//			} else {
-//				io.WriteString(w, string(utils.JsonStatus("fail")))
-//			}
-//		default:
-//			w.WriteHeader(http.StatusBadRequest)
-//			log.Println("ERROR: Invalid HTTP Method")
-//		}
-//	}
-
 type Transaction struct {
 	SenderBlockchainAddress    string  `json:"sender_blockchain_address"`
 	RecipientBlockchainAddress string  `json:"recipient_blockchain_address"`
-	Value                      float64 `json:"value"`
+	Value                      float32 `json:"value"`
 }
 type Block struct {
 	Timestamp      int64
@@ -176,6 +134,10 @@ type Block struct {
 	PrevBlockHash  []byte
 	MerkleRootHash []byte
 	Hash           []byte
+}
+
+type Balance struct {
+	Balance float32 `json:"balance"`
 }
 
 func (b *Block) UnmarshalJSON(data []byte) error {
@@ -204,7 +166,7 @@ type IUserProfile struct {
 	PrivateKey        string
 	PublicKey         string
 	BlockchainAddress string
-	Balance           float64
+	Balance           float32
 }
 
 var UserProfile = IUserProfile{
@@ -245,7 +207,8 @@ func PrintBlockchain(blocks []Block) {
 	fmt.Printf("%s\n", strings.Repeat("*", 25))
 }
 
-func printUserProfile() {
+func (bs *BlockchainService) PrintUserProfile() {
+	bs.CheckAssetBalance(true)
 	profileInformation := [][]string{
 		[]string{"Your private key", UserProfile.PrivateKey},
 		[]string{"Your public key", UserProfile.PublicKey},
@@ -263,7 +226,7 @@ func printUserProfile() {
 	table.Render()
 }
 
-func printMenuOptions() {
+func (bs *BlockchainService) PrintMenuOptions() {
 	menuOptions := [][]string{
 		[]string{"1", "Create wallet"},
 		[]string{"2", "Create transaction"},
@@ -274,6 +237,7 @@ func printMenuOptions() {
 		[]string{"7", "Check asset balance based on specific address"},
 		[]string{"8", "Request for a new block from the blockchain gateway (used for testing)"},
 		[]string{"9", "Request all nodes to start mining automatically"},
+		[]string{"10", "Reload an application"},
 		[]string{"0", "Exit"},
 	}
 	table := tablewriter.NewWriter(os.Stdout)
@@ -300,10 +264,39 @@ func (bs *BlockchainService) CreateWallet() {
 		fmt.Print("\n\nERROR MESSAGE: Create wallet failed...Please try again!")
 		return
 	}
+	// Create a wallet for a new user
 	UserProfile.PrivateKey = myWallet.PrivateKeyStr()
 	UserProfile.PublicKey = myWallet.PublicKeyStr()
 	UserProfile.BlockchainAddress = myWallet.BlockchainAddress()
-	fmt.Print("\n\nSUCCESS MESSAGE: Your wallet has been created. Let's use our service!")
+	UserProfile.Balance = 0
+
+	// System send 10 coins as a default for new user
+	systemWallet := wallet.NewWallet()
+	transaction := wallet.NewTransaction(systemWallet.PrivateKey(), systemWallet.PublicKey(),
+		"BLOCKCHAIN_SERVICE_PROVIDER", UserProfile.BlockchainAddress, 10.0)
+
+	signature := transaction.GenerateSignature()
+	signatureStr := signature.String()
+	// Make transaction request
+	var systemWalletAddress = "BLOCKCHAIN_SERVICE_PROVIDER"
+	var recipientBlockchainAddress = UserProfile.BlockchainAddress
+	var systemPublicKey = systemWallet.PublicKeyStr()
+	var amount = float32(10.0)
+
+	bt := &blockchain.TransactionRequest{
+		&systemWalletAddress,
+		&recipientBlockchainAddress,
+		&systemPublicKey,
+		&amount,
+		&signatureStr,
+	}
+
+	m, _ := json.Marshal(bt)
+	buf := bytes.NewBuffer(m)
+	resp, _ := http.Post(bs.GetGateway()+"/transactions", "application/json", buf)
+	if resp.StatusCode == 201 {
+		fmt.Print("\n\nSUCCESS MESSAGE: Your wallet has been created. You can now begin using our services!")
+	}
 }
 
 func (bs *BlockchainService) ScanBlockchain() {
@@ -368,7 +361,7 @@ func (bs *BlockchainService) ScanTransactionInMemPool() {
 
 		fmt.Println("\nLIST TRANSACTIONS IN MEMPOOL: ")
 		for i, transaction := range transactionList.Transactions {
-			fmt.Printf("\n%s Transaction %d %s\n", strings.Repeat("=", 25), i,
+			fmt.Printf("\n%s Transaction %d %s\n", strings.Repeat("=", 25), i+1,
 				strings.Repeat("=", 25))
 			//fmt.Printf("%s\n", strings.Repeat("-", 40))
 			fmt.Println("Sender:", transaction.SenderBlockchainAddress)
@@ -378,14 +371,96 @@ func (bs *BlockchainService) ScanTransactionInMemPool() {
 	}
 }
 
+func (bs *BlockchainService) BlockMining() {
+	endpoint := fmt.Sprintf("%s/mine", bs.GetGateway())
+	client := &http.Client{}
+	newRequest, _ := http.NewRequest("GET", endpoint, nil)
+	response, err := client.Do(newRequest)
+	if err != nil {
+		log.Printf("ERROR: %v", err)
+		return
+	}
+	if response.StatusCode == http.StatusOK {
+		fmt.Printf("\n\nSUCCESS MESSAGE: Blockchain Node is mining a new block")
+	}
+}
+
+func (bs *BlockchainService) BlockAutoMining() {
+	endpoint := fmt.Sprintf("%s/mine/auto", bs.GetGateway())
+	client := &http.Client{}
+	newRequest, _ := http.NewRequest("GET", endpoint, nil)
+	response, err := client.Do(newRequest)
+	if err != nil {
+		log.Printf("ERROR: %v", err)
+		return
+	}
+	if response.StatusCode == http.StatusOK {
+		fmt.Printf("\n\nSUCCESS MESSAGE: Blockchain Node is mining a new block")
+	}
+}
+
+func (bs *BlockchainService) CheckAssetBalance(mySelf bool) {
+	var blockchainAddress string
+	if mySelf == true { // check asset balance of client user
+		blockchainAddress = UserProfile.BlockchainAddress
+	} else {
+		fmt.Printf("Enter your blockchain address: ")
+		fmt.Scanf("%s", &blockchainAddress)
+	}
+
+	endpoint := fmt.Sprintf("%s/balance", bs.GetGateway())
+
+	client := &http.Client{}
+	newRequest, _ := http.NewRequest("GET", endpoint, nil)
+	q := newRequest.URL.Query()
+	q.Add("blockchain_address", blockchainAddress)
+	newRequest.URL.RawQuery = q.Encode()
+
+	response, err := client.Do(newRequest)
+	if err != nil {
+		fmt.Print("\n\nERROR MESSSAGE: Unexpeced error when scanning asset balance!")
+	}
+
+	if response.StatusCode == 200 {
+		decoder := json.NewDecoder(response.Body)
+		var accountBalance Balance
+		err := decoder.Decode(&accountBalance)
+		if err != nil {
+			fmt.Print("ERROR MESSAGE: %v", err)
+		}
+
+		if mySelf == true {
+			log.Println("account balance response: ", accountBalance.Balance)
+			UserProfile.Balance = accountBalance.Balance
+		} else {
+			fmt.Printf("\n\nThis account balance: %f", accountBalance.Balance)
+		}
+
+	} else {
+		fmt.Print("\n\nERROR MESSSAGE: Address Not Found!")
+	}
+}
+
 func (bs *BlockchainService) RunCli() {
 	for {
 		fmt.Print("\n")
-		printUserProfile()
-		printMenuOptions()
+		bs.PrintUserProfile()
+		bs.PrintMenuOptions()
 		fmt.Printf("Enter your choice: ")
-		var choice int
-		fmt.Scanf("%d", &choice)
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Print("\n\nError reading input:", err)
+			continue
+		}
+		// Xóa kí tự xuống dòng từ chuỗi đầu vào
+		input = strings.TrimSpace(input)
+		// Chuyển đổi chuỗi thành số nguyên
+		choice, err := strconv.Atoi(input)
+		if err != nil {
+			fmt.Print("\n\nERROR MESSAGE: Invalid input. Please enter a valid option!")
+			continue
+		}
 		switch choice {
 		case 1:
 			bs.CreateWallet()
@@ -400,15 +475,22 @@ func (bs *BlockchainService) RunCli() {
 		case 6:
 			// doOperation()
 		case 7:
-			// doOperation()
+			bs.CheckAssetBalance(false)
 		case 8:
-			// doOperation()
+			bs.BlockMining()
 		case 9:
-			// doOperation()
+			bs.BlockAutoMining()
+		case 10:
+			fmt.Print("\n\nSTATUS MESSAGE: Reloaded successfully...")
 		case 0:
 			fmt.Println("Exiting...")
 			os.Exit(0)
 			return
+		default:
+			if choice != 10 {
+				fmt.Print("\n\nERROR MESSAGE: Invalid choice. Please enter a valid option!")
+			}
+			time.Sleep(2 * time.Second)
 		}
 	}
 }

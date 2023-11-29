@@ -449,20 +449,29 @@ func (bc *Blockchain) ProofOfWork() int {
 	return nonce
 }
 
-func (bc *Blockchain) CalculateTotalAmount(blockchainAddress string) float32 {
-	//var totalAmount float32 = 0.0
-	//for _, b := range bc.blocks {
-	//	for _, t := range b.Transactions {
-	//		if t.recipientBlockchainAddress == blockchainAddress {
-	//			totalAmount += t.value
-	//		}
-	//		if t.senderBlockchainAddress == blockchainAddress {
-	//			totalAmount -= t.value
-	//		}
-	//	}
-	//}
-	//return totalAmount
-	return 0
+func (bc *Blockchain) CalculateTotalBalance(blockchainAddress string) float32 {
+	var totalAmount float32 = 0.0
+	for _, b := range bc.blocks {
+		for _, t := range b.Transactions {
+			type TransactionInfo struct {
+				Sender    string  `json:"sender_blockchain_address"`
+				Recipient string  `json:"recipient_blockchain_address"`
+				Value     float32 `json:"value"`
+			}
+			var transInfo TransactionInfo
+			err := json.Unmarshal(t.Data, &transInfo)
+			if err != nil {
+				log.Println(err)
+			}
+			if transInfo.Recipient == blockchainAddress {
+				totalAmount += transInfo.Value
+			}
+			if transInfo.Sender == blockchainAddress {
+				totalAmount -= transInfo.Value
+			}
+		}
+	}
+	return totalAmount
 }
 
 // Print blockchain
@@ -622,14 +631,16 @@ func (tr *TransactionRequest) Validate() bool {
 	return true
 }
 
-type AmountResponse struct {
-	Amount float32 `json:"amount"`
+// ------------------------- Balance Response For Client -------------------------
+
+type BalanceResponse struct {
+	Balance float32 `json:"balance"`
 }
 
-func (ar *AmountResponse) MarshalJSON() ([]byte, error) {
+func (br *BalanceResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Amount float32 `json:"amount"`
+		Balance float32 `json:"balance"`
 	}{
-		Amount: ar.Amount,
+		Balance: br.Balance,
 	})
 }
