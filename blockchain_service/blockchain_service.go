@@ -19,109 +19,12 @@ import (
 	"time"
 )
 
+// ========== DATA TYPES ==========
+
 type BlockchainService struct {
 	port    uint16
 	gateway string
 }
-
-func NewBlockchainService(port uint16, gateway string) *BlockchainService {
-	return &BlockchainService{port, gateway}
-}
-
-func (bs *BlockchainService) GetPort() uint16 {
-	return bs.port
-}
-
-func (bs *BlockchainService) GetGateway() string {
-	return bs.gateway
-}
-
-func (bs *BlockchainService) CreateTransaction() {
-	if UserProfile.PublicKey == "" || UserProfile.BlockchainAddress == "" || UserProfile.PrivateKey == "" {
-		fmt.Print("\n\nERROR MESSAGE: Please create your wallet first!")
-		return
-	}
-
-	if UserProfile.Balance <= 0 {
-		fmt.Print("\n\nERROR MESSAGE: Your account balance is insufficient!")
-		return
-	}
-
-	input := bufio.NewScanner(os.Stdin)
-	var recipientAddress string
-	fmt.Print("Enter recipient blockchain address: ")
-	input.Scan()
-	recipientAddress = input.Text()
-
-	var value float64
-	fmt.Print("Enter amount of value: ")
-	input.Scan()
-	value, _ = strconv.ParseFloat(input.Text(), 64)
-
-	var isSignedTransaction string
-	var senderPrivateKey string
-	fmt.Print("Sign your transaction: (y/yes, n/no): ")
-	input.Scan()
-	isSignedTransaction = input.Text()
-
-	if isSignedTransaction == "yes" || isSignedTransaction == "y" {
-		senderPrivateKey = UserProfile.PrivateKey
-	} else {
-		senderPrivateKey = ""
-		fmt.Print("\n\nERROR MESSAGE: Your transaction has been canceled!")
-		return
-	}
-
-	var t wallet.TransactionRequest = wallet.TransactionRequest{
-		SenderPrivateKey:           senderPrivateKey,
-		SenderBlockchainAddress:    UserProfile.BlockchainAddress,
-		RecipientBlockchainAddress: recipientAddress,
-		SenderPublicKey:            UserProfile.PublicKey,
-		Value:                      fmt.Sprintf("%f", value),
-	}
-
-	if !t.Validate() {
-		log.Print("\n\nERROR MESSAGE: Required Fields are Missing...Try again!")
-		return
-	}
-
-	publicKey := utils.PublicKeyFromString(t.SenderPublicKey)
-	privateKey := utils.PrivateKeyFromString(t.SenderPrivateKey, publicKey)
-	value, err := strconv.ParseFloat(t.Value, 32)
-	if err != nil {
-		log.Println("ERROR: parse error")
-		return
-	}
-	value32 := float32(value)
-
-	transaction := wallet.NewTransaction(privateKey, publicKey,
-		t.SenderBlockchainAddress, t.RecipientBlockchainAddress, value32)
-
-	signature := transaction.GenerateSignature()
-	signatureStr := signature.String() // convert to string
-
-	bt := &blockchain.TransactionRequest{
-		&t.SenderBlockchainAddress,
-		&t.RecipientBlockchainAddress,
-		&t.SenderPublicKey,
-		&value32,
-		&signatureStr,
-	}
-
-	m, _ := json.Marshal(bt)
-	buf := bytes.NewBuffer(m)
-
-	resp, _ := http.Post(bs.GetGateway()+"/transactions", "application/json", buf)
-
-	if resp.StatusCode == 201 {
-		fmt.Print("\n\nSUCCESS MESSAGE: Your transaction has been sent successfully...")
-		return
-	} else {
-		fmt.Println("\n\nERROR MESSAGE: Your transaction has failed, please try again...")
-		return
-	}
-}
-
 type Transaction struct {
 	SenderBlockchainAddress    string  `json:"sender_blockchain_address"`
 	RecipientBlockchainAddress string  `json:"recipient_blockchain_address"`
@@ -138,6 +41,54 @@ type Block struct {
 
 type Balance struct {
 	Balance float32 `json:"balance"`
+}
+
+type IUserProfile struct {
+	PrivateKey        string
+	PublicKey         string
+	BlockchainAddress string
+	Balance           float32
+}
+
+var UserProfile = IUserProfile{
+	PrivateKey:        "",
+	PublicKey:         "",
+	BlockchainAddress: "",
+	Balance:           0,
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+func NewBlockchainService(port uint16, gateway string) *BlockchainService {
+	return &BlockchainService{port, gateway}
+}
+func PrintResponseBody(response *http.Response) {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(body))
+}
+func PrintBlockchain(blocks []Block) {
+	fmt.Print("\n\n")
+	for i, block := range blocks {
+		fmt.Printf("\n%s Block %d %s\n", strings.Repeat("=", 25), i,
+			strings.Repeat("=", 25))
+		fmt.Printf("Timestamp: %d\n", block.Timestamp)
+		fmt.Printf("Nonce: %d\n", block.Nonce)
+		fmt.Printf("Previous Block Hash: %x\n", block.PrevBlockHash)
+		fmt.Printf("Merkle Root Hash: %x\n", block.MerkleRootHash)
+		fmt.Printf("Hash: %x\n", block.Hash)
+		fmt.Println("List of all transactions:")
+		for _, transaction := range block.Transactions {
+			// Show list transactions ìnformation
+			fmt.Printf("%s\n", strings.Repeat("-", 40))
+			fmt.Println("Sender:", transaction.SenderBlockchainAddress)
+			fmt.Println("Recipient:", transaction.RecipientBlockchainAddress)
+			fmt.Println("Value:", transaction.Value)
+		}
+	}
+	fmt.Printf("%s\n", strings.Repeat("*", 35))
 }
 
 func (b *Block) UnmarshalJSON(data []byte) error {
@@ -162,49 +113,14 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type IUserProfile struct {
-	PrivateKey        string
-	PublicKey         string
-	BlockchainAddress string
-	Balance           float32
+// ========== METHODS ==========
+
+func (bs *BlockchainService) GetPort() uint16 {
+	return bs.port
 }
 
-var UserProfile = IUserProfile{
-	PrivateKey:        "",
-	PublicKey:         "",
-	BlockchainAddress: "",
-	Balance:           0,
-}
-
-// helper function
-func printResponseBody(response *http.Response) {
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(body))
-}
-
-func PrintBlockchain(blocks []Block) {
-	fmt.Print("\n\n")
-	for i, block := range blocks {
-		fmt.Printf("\n%s Block %d %s\n", strings.Repeat("=", 25), i,
-			strings.Repeat("=", 25))
-		fmt.Printf("Timestamp: %d\n", block.Timestamp)
-		fmt.Printf("Nonce: %d\n", block.Nonce)
-		fmt.Printf("Previous Block Hash: %x\n", block.PrevBlockHash)
-		fmt.Printf("Merkle Root Hash: %x\n", block.MerkleRootHash)
-		fmt.Printf("Hash: %x\n", block.Hash)
-		fmt.Println("List of all transactions:")
-		for _, transaction := range block.Transactions {
-			// Show list transactions ìnformation
-			fmt.Printf("%s\n", strings.Repeat("-", 40))
-			fmt.Println("Sender:", transaction.SenderBlockchainAddress)
-			fmt.Println("Recipient:", transaction.RecipientBlockchainAddress)
-			fmt.Println("Value:", transaction.Value)
-		}
-	}
-	fmt.Printf("%s\n", strings.Repeat("*", 25))
+func (bs *BlockchainService) GetGateway() string {
+	return bs.gateway
 }
 
 func (bs *BlockchainService) PrintUserProfile() {
@@ -299,6 +215,92 @@ func (bs *BlockchainService) CreateWallet() {
 	}
 }
 
+func (bs *BlockchainService) CreateTransaction() {
+	if UserProfile.PublicKey == "" || UserProfile.BlockchainAddress == "" || UserProfile.PrivateKey == "" {
+		fmt.Print("\n\nERROR MESSAGE: Please create your wallet first!")
+		return
+	}
+
+	if UserProfile.Balance <= 0 {
+		fmt.Print("\n\nERROR MESSAGE: Your account balance is insufficient!")
+		return
+	}
+
+	input := bufio.NewScanner(os.Stdin)
+	var recipientAddress string
+	fmt.Print("Enter recipient blockchain address: ")
+	input.Scan()
+	recipientAddress = input.Text()
+
+	var value float64
+	fmt.Print("Enter amount of value: ")
+	input.Scan()
+	value, _ = strconv.ParseFloat(input.Text(), 64)
+
+	var isSignedTransaction string
+	var senderPrivateKey string
+	fmt.Print("Sign your transaction: (y/yes, n/no): ")
+	input.Scan()
+	isSignedTransaction = input.Text()
+
+	if isSignedTransaction == "yes" || isSignedTransaction == "y" {
+		senderPrivateKey = UserProfile.PrivateKey
+	} else {
+		senderPrivateKey = ""
+		fmt.Print("\n\nERROR MESSAGE: Your transaction has been canceled!")
+		return
+	}
+
+	var t wallet.TransactionRequest = wallet.TransactionRequest{
+		SenderPrivateKey:           senderPrivateKey,
+		SenderBlockchainAddress:    UserProfile.BlockchainAddress,
+		RecipientBlockchainAddress: recipientAddress,
+		SenderPublicKey:            UserProfile.PublicKey,
+		Value:                      fmt.Sprintf("%f", value),
+	}
+
+	if !t.Validate() {
+		log.Print("\n\nERROR MESSAGE: Required Fields are Missing...Try again!")
+		return
+	}
+
+	publicKey := utils.PublicKeyFromString(t.SenderPublicKey)
+	privateKey := utils.PrivateKeyFromString(t.SenderPrivateKey, publicKey)
+	value, err := strconv.ParseFloat(t.Value, 32)
+	if err != nil {
+		log.Println("ERROR: parse error")
+		return
+	}
+	value32 := float32(value)
+
+	transaction := wallet.NewTransaction(privateKey, publicKey,
+		t.SenderBlockchainAddress, t.RecipientBlockchainAddress, value32)
+
+	signature := transaction.GenerateSignature()
+	signatureStr := signature.String() // convert to string
+
+	bt := &blockchain.TransactionRequest{
+		&t.SenderBlockchainAddress,
+		&t.RecipientBlockchainAddress,
+		&t.SenderPublicKey,
+		&value32,
+		&signatureStr,
+	}
+
+	m, _ := json.Marshal(bt)
+	buf := bytes.NewBuffer(m)
+
+	resp, _ := http.Post(bs.GetGateway()+"/transactions", "application/json", buf)
+
+	if resp.StatusCode == 201 {
+		fmt.Print("\n\nSUCCESS MESSAGE: Your transaction has been sent successfully...")
+		return
+	} else {
+		fmt.Println("\n\nERROR MESSAGE: Your transaction has failed, please try again...")
+		return
+	}
+}
+
 func (bs *BlockchainService) ScanBlockchain() {
 	endpoint := fmt.Sprintf("%s/chain", bs.GetGateway())
 	client := &http.Client{}
@@ -371,6 +373,92 @@ func (bs *BlockchainService) ScanTransactionInMemPool() {
 	}
 }
 
+func (bs *BlockchainService) ScanTransactionHistory(blockchainAddress string) {
+	endpoint := fmt.Sprintf("%s/transactions/history", bs.GetGateway())
+
+	client := &http.Client{}
+	newRequest, _ := http.NewRequest("GET", endpoint, nil)
+	q := newRequest.URL.Query()
+	q.Add("blockchain_address", blockchainAddress)
+	newRequest.URL.RawQuery = q.Encode()
+
+	response, err := client.Do(newRequest)
+	if err != nil {
+		fmt.Print("\n\nERROR MESSAGE: Unexpected error when checking transaction history!")
+	}
+
+	if response.StatusCode == 200 {
+		decoder := json.NewDecoder(response.Body)
+		type TransactionInfo struct {
+			Sender    string  `json:"sender_blockchain_address"`
+			Recipient string  `json:"recipient_blockchain_address"`
+			Value     float32 `json:"value"`
+		}
+		type TransactionHistory struct {
+			Transactions []TransactionInfo `json:"transactions"`
+			Length       int               `json:"length"`
+		}
+		var transHistoryList TransactionHistory
+		err := decoder.Decode(&transHistoryList)
+		if err != nil {
+			fmt.Printf("ERROR MESSAGE: %v", err)
+		}
+		fmt.Println("\n\nList of all transactions:")
+		for _, transaction := range transHistoryList.Transactions {
+			// Show list transactions ìnformation
+			fmt.Printf("%s\n", strings.Repeat("-", 40))
+			fmt.Println("Sender:", transaction.Sender)
+			fmt.Println("Recipient:", transaction.Recipient)
+			fmt.Println("Value:", transaction.Value)
+		}
+		fmt.Printf("%s\n", strings.Repeat("*", 40))
+		fmt.Println("THE TOTAL NUMBER OF TRANSACTIONS: ", transHistoryList.Length)
+	} else {
+		fmt.Print("\n\nERROR MESSAGE: Address Not Found!")
+	}
+}
+
+func (bs *BlockchainService) CheckAssetBalance(mySelf bool) {
+	var blockchainAddress string
+	if mySelf == true { // check asset balance of client user
+		blockchainAddress = UserProfile.BlockchainAddress
+	} else {
+		fmt.Printf("Enter your blockchain address: ")
+		fmt.Scanf("%s", &blockchainAddress)
+	}
+
+	endpoint := fmt.Sprintf("%s/balance", bs.GetGateway())
+
+	client := &http.Client{}
+	newRequest, _ := http.NewRequest("GET", endpoint, nil)
+	q := newRequest.URL.Query()
+	q.Add("blockchain_address", blockchainAddress)
+	newRequest.URL.RawQuery = q.Encode()
+
+	response, err := client.Do(newRequest)
+	if err != nil {
+		fmt.Print("\n\nERROR MESSAGE: Unexpected error when scanning asset balance!")
+	}
+
+	if response.StatusCode == 200 {
+		decoder := json.NewDecoder(response.Body)
+		var accountBalance Balance
+		err := decoder.Decode(&accountBalance)
+		if err != nil {
+			fmt.Printf("ERROR MESSAGE: %v", err)
+		}
+
+		if mySelf == true {
+			UserProfile.Balance = accountBalance.Balance
+		} else {
+			fmt.Printf("\n\nThis account balance: %f", accountBalance.Balance)
+		}
+
+	} else {
+		fmt.Print("\n\nERROR MESSAGE: Address Not Found!")
+	}
+}
+
 func (bs *BlockchainService) BlockMining() {
 	endpoint := fmt.Sprintf("%s/mine", bs.GetGateway())
 	client := &http.Client{}
@@ -395,49 +483,7 @@ func (bs *BlockchainService) BlockAutoMining() {
 		return
 	}
 	if response.StatusCode == http.StatusOK {
-		fmt.Printf("\n\nSUCCESS MESSAGE: Blockchain Node is mining a new block")
-	}
-}
-
-func (bs *BlockchainService) CheckAssetBalance(mySelf bool) {
-	var blockchainAddress string
-	if mySelf == true { // check asset balance of client user
-		blockchainAddress = UserProfile.BlockchainAddress
-	} else {
-		fmt.Printf("Enter your blockchain address: ")
-		fmt.Scanf("%s", &blockchainAddress)
-	}
-
-	endpoint := fmt.Sprintf("%s/balance", bs.GetGateway())
-
-	client := &http.Client{}
-	newRequest, _ := http.NewRequest("GET", endpoint, nil)
-	q := newRequest.URL.Query()
-	q.Add("blockchain_address", blockchainAddress)
-	newRequest.URL.RawQuery = q.Encode()
-
-	response, err := client.Do(newRequest)
-	if err != nil {
-		fmt.Print("\n\nERROR MESSSAGE: Unexpeced error when scanning asset balance!")
-	}
-
-	if response.StatusCode == 200 {
-		decoder := json.NewDecoder(response.Body)
-		var accountBalance Balance
-		err := decoder.Decode(&accountBalance)
-		if err != nil {
-			fmt.Print("ERROR MESSAGE: %v", err)
-		}
-
-		if mySelf == true {
-			log.Println("account balance response: ", accountBalance.Balance)
-			UserProfile.Balance = accountBalance.Balance
-		} else {
-			fmt.Printf("\n\nThis account balance: %f", accountBalance.Balance)
-		}
-
-	} else {
-		fmt.Print("\n\nERROR MESSSAGE: Address Not Found!")
+		fmt.Printf("\n\nSUCCESS MESSAGE: Blockchain Node started mining automatically")
 	}
 }
 
@@ -471,9 +517,14 @@ func (bs *BlockchainService) RunCli() {
 		case 4:
 			bs.ScanTransactionInMemPool()
 		case 5:
-			// doOperation()
+			bs.ScanTransactionHistory(UserProfile.BlockchainAddress)
 		case 6:
-			// doOperation()
+			input := bufio.NewScanner(os.Stdin)
+			var blockchainAddress string
+			fmt.Print("Enter blockchain address: ")
+			input.Scan()
+			blockchainAddress = input.Text()
+			bs.ScanTransactionHistory(blockchainAddress)
 		case 7:
 			bs.CheckAssetBalance(false)
 		case 8:

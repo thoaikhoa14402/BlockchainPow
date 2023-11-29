@@ -39,7 +39,7 @@ func (bcs *BlockchainServer) GetBlockchain() *blockchain.Blockchain {
 	return bc
 }
 
-func (bcs *BlockchainServer) GetChain(w http.ResponseWriter, req *http.Request) {
+func (bcs *BlockchainServer) Chain(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
 		w.Header().Add("Content-Type", "application/json") // this line sets the Content-Type header to json on the response. This indicates to clients that the response body will be JSON encoded data.
@@ -173,6 +173,47 @@ func (bcs *BlockchainServer) Transactions(w http.ResponseWriter, req *http.Reque
 	}
 }
 
+func (bcs *BlockchainServer) TransactionsHistory(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		blockchainAddress := req.URL.Query().Get("blockchain_address")
+		w.Header().Add("Content-Type", "application/json")
+		blocks := bcs.GetBlockchain().GetChain()
+		type TransactionInfo struct {
+			Sender    string  `json:"sender_blockchain_address"`
+			Recipient string  `json:"recipient_blockchain_address"`
+			Value     float32 `json:"value"`
+		}
+		var transRespList []TransactionInfo
+		for _, block := range blocks {
+			for _, transaction := range block.Transactions {
+				var transactionResp TransactionInfo
+				err := json.Unmarshal(transaction.Data, &transactionResp)
+				if err != nil {
+					fmt.Println("Error decoding transaction data:", err)
+					return
+				}
+				// Add to transactions list
+				if transactionResp.Sender == blockchainAddress || transactionResp.Recipient == blockchainAddress {
+					transRespList = append(transRespList, transactionResp)
+				}
+			}
+		}
+		m, _ := json.Marshal(struct {
+			Transactions []TransactionInfo `json:"transactions"`
+			Length       int               `json:"length"`
+		}{
+			Transactions: transRespList,
+			Length:       len(transRespList),
+		})
+
+		io.WriteString(w, string(m[:]))
+
+	default:
+		log.Println("ERROR: Invalid HTTP Method")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+}
 func (bcs *BlockchainServer) Mine(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
@@ -210,7 +251,7 @@ func (bcs *BlockchainServer) AutoMine(w http.ResponseWriter, req *http.Request) 
 	}
 }
 
-func (bcs *BlockchainServer) GetBalance(w http.ResponseWriter, req *http.Request) {
+func (bcs *BlockchainServer) Balance(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
 		blockchainAddress := req.URL.Query().Get("blockchain_address")
@@ -246,11 +287,12 @@ func (bcs *BlockchainServer) ReachConsensus(w http.ResponseWriter, req *http.Req
 
 func (bcs *BlockchainServer) Run() {
 	bcs.GetBlockchain().Run()
-	http.HandleFunc("/chain", bcs.GetChain)
+	http.HandleFunc("/chain", bcs.Chain)
 	http.HandleFunc("/transactions", bcs.Transactions)
+	http.HandleFunc("/transactions/history", bcs.TransactionsHistory)
+	http.HandleFunc("/balance", bcs.Balance)
 	http.HandleFunc("/mine", bcs.Mine)
 	http.HandleFunc("/mine/auto", bcs.AutoMine)
-	http.HandleFunc("/balance", bcs.GetBalance)
 	http.HandleFunc("/consensus", bcs.ReachConsensus)
 	log.Fatal(http.ListenAndServe("0.0.0.0:"+strconv.Itoa(int(bcs.Port())), nil))
 }

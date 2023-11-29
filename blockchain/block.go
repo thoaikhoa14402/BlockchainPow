@@ -40,8 +40,6 @@ type Block struct {
 	Hash           []byte
 }
 
-// Set hash for a single block
-
 func (b *Block) SetHash() {
 	// 1. Declare headers buffer for writing data to
 	var headersBuffer bytes.Buffer
@@ -63,15 +61,11 @@ func (b *Block) SetHash() {
 	b.Hash = hash[:]
 }
 
-// Create a new block
-
 func NewBlock(nonce int, transactions []*Transaction, previousBlockHash []byte, merkleRootHash []byte) *Block {
 	block := &Block{time.Now().Unix(), nonce, []*Transaction(transactions), previousBlockHash, merkleRootHash, []byte{}}
 	block.SetHash()
 	return block
 }
-
-// Create a new genesis block
 
 func NewGenesisBlock() *Block {
 	transactionList := []*Transaction{
@@ -82,31 +76,21 @@ func NewGenesisBlock() *Block {
 	return genesisBlock
 }
 
-// Get previous hash block
-
 func (b *Block) GetPreviousHash() []byte {
 	return b.PrevBlockHash
 }
-
-// Get merkle root hash of block
 
 func (b *Block) GetMerkleRootHash() []byte {
 	return b.MerkleRootHash
 }
 
-// Get block hash
-
 func (b *Block) GetHash() []byte {
 	return b.Hash
 }
 
-// Get nonce number
-
 func (b *Block) GetNonce() int {
 	return b.Nonce
 }
-
-// Get a list of transactions
 
 func (b *Block) GetTransactions() []*Transaction {
 	return b.Transactions
@@ -176,8 +160,6 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	t.Data = data
 	return nil
 }
-
-// Create a new transaction
 
 func NewTransaction(sender string, recipient string, value float32) *Transaction {
 	// convert this transaction struct to byte array represented for JSON data
@@ -275,8 +257,6 @@ type Blockchain struct {
 	muxPeerNodes      sync.Mutex
 }
 
-// Initialize a new blockchain
-
 func NewBlockchain(blockchainAddress string, port uint16) *Blockchain {
 	bc := new(Blockchain)
 	bc.blockchainAddress = blockchainAddress
@@ -290,10 +270,7 @@ func NewBlockchain(blockchainAddress string, port uint16) *Blockchain {
 func (bc *Blockchain) Run() {
 	bc.StartSyncPeerNodes()
 	bc.HandleConflicts()
-	//bc.Print()
 }
-
-// Get chain of blocks
 
 func (bc *Blockchain) GetChain() []*Block {
 	return bc.blocks
@@ -324,8 +301,6 @@ func (bc *Blockchain) ClearTransactionPool() {
 	bc.transactionPool = bc.transactionPool[:0]
 }
 
-// Add a new block
-
 func (bc *Blockchain) AddBlock(nonce int, previousHash []byte, merkleRootHash []byte) *Block {
 	b := NewBlock(nonce, bc.transactionPool, previousHash, merkleRootHash)
 	bc.blocks = append(bc.blocks, b)
@@ -340,8 +315,6 @@ func (bc *Blockchain) AddBlock(nonce int, previousHash []byte, merkleRootHash []
 	}
 	return b
 }
-
-// Copy Transaction Pool
 
 func (bc *Blockchain) CopyTransactionPool() []*Transaction {
 	transactions := make([]*Transaction, 0)
@@ -361,21 +334,9 @@ func (bc *Blockchain) CopyTransactionPool() []*Transaction {
 	return transactions
 }
 
-// Get Last Block
-
 func (bc *Blockchain) GetLastBlock() *Block {
 	return bc.blocks[len(bc.blocks)-1]
 }
-
-// Valid Proof
-
-//func (bc *Blockchain) ValidProof(nonce int, previousBlockHash []byte, transactions []*Transaction, difficulty int) bool {
-////	zeros := strings.Repeat("0", difficulty)
-////	guessBlock := &Block{0, nonce, transactions, previousBlockHash, []byte{}}
-////	guessBlock.SetHash()
-////	guessHashStr := fmt.Sprintf("%x", guessBlock.GetHash())
-////	return guessHashStr[:difficulty] == zeros
-////}
 
 func (bc *Blockchain) ValidProof(nonce int, previousBlockHash []byte, merkleRootHash []byte, difficulty int) bool {
 	zeros := strings.Repeat("0", difficulty)
@@ -385,13 +346,10 @@ func (bc *Blockchain) ValidProof(nonce int, previousBlockHash []byte, merkleRoot
 	return guessHashStr[:difficulty] == zeros
 }
 
-// Add a new transaction to transactions pool and then synchronize to other nodes
-
 func (bc *Blockchain) CreateTransaction(sender string, recipient string, value float32,
 	senderPublicKey *ecdsa.PublicKey, s *utils.Signature) bool {
-	//isTransacted := bc.AddTransaction(sender, recipient, value, senderPublicKey, s)
 	isTransactionAdded := bc.AddTransaction(sender, recipient, value, senderPublicKey, s)
-	// Sync
+	// Add a new transaction to transactions pool and then synchronize to other nodes
 	if isTransactionAdded {
 		for _, n := range bc.peerNodes {
 			publicKeyStr := fmt.Sprintf("%064x%064x", senderPublicKey.X.Bytes(), senderPublicKey.Y.Bytes())
@@ -412,8 +370,6 @@ func (bc *Blockchain) CreateTransaction(sender string, recipient string, value f
 	return isTransactionAdded
 }
 
-// Add a new transaction
-
 func (bc *Blockchain) AddTransaction(sender string, recipient string, value float32,
 	senderPublicKey *ecdsa.PublicKey, s *utils.Signature) bool {
 	t := NewTransaction(sender, recipient, value)
@@ -429,8 +385,6 @@ func (bc *Blockchain) AddTransaction(sender string, recipient string, value floa
 	}
 	return false
 }
-
-// Verify transaction signature
 
 func (bc *Blockchain) VerifyTransactionSignature(
 	senderPublicKey *ecdsa.PublicKey, s *utils.Signature, t *Transaction) bool {
@@ -474,7 +428,6 @@ func (bc *Blockchain) CalculateTotalBalance(blockchainAddress string) float32 {
 	return totalAmount
 }
 
-// Print blockchain
 func (bc *Blockchain) Print() {
 	for i, block := range bc.blocks {
 		fmt.Printf("\n%s Block %d %s\n", strings.Repeat("=", 25), i,
@@ -504,8 +457,6 @@ func (bc *Blockchain) Print() {
 	fmt.Printf("%s\n", strings.Repeat("*", 25))
 }
 
-// Mining a new block
-
 func (bc *Blockchain) Mining() bool {
 	bc.mux.Lock()
 	defer bc.mux.Unlock()
@@ -533,24 +484,6 @@ func (bc *Blockchain) StartMining() {
 	_ = time.AfterFunc(time.Second*MINING_TIMER, bc.StartMining)
 }
 
-//func (bc *Blockchain) ValidChain(chain []*Block) bool {
-//	preBlock := chain[0]
-//	currentIndex := 1
-//	for currentIndex < len(chain) {
-//		b := chain[currentIndex]
-//		if !bytes.Equal(b.GetPreviousHash(), preBlock.GetHash()) {
-//			return false
-//		}
-//
-//		if !bc.ValidProof(b.GetNonce(), b.GetPreviousHash(), b.GetTransactions(), MINING_DIFFICULTY) {
-//			return false
-//		}
-//		preBlock = b
-//		currentIndex += 1
-//	}
-//	return true
-//}
-
 func (bc *Blockchain) ValidChain(chain []*Block) bool {
 	preBlock := chain[0]
 	currentIndex := 1
@@ -568,8 +501,6 @@ func (bc *Blockchain) ValidChain(chain []*Block) bool {
 	}
 	return true
 }
-
-// Resolve conflicts between nodes
 
 func (bc *Blockchain) HandleConflicts() bool {
 	var longestChain []*Block = nil
@@ -598,10 +529,10 @@ func (bc *Blockchain) HandleConflicts() bool {
 
 	if longestChain != nil {
 		bc.blocks = longestChain
-		log.Printf("Resovle confilicts replaced")
+		log.Printf("Conflicts have been replaced")
 		return true
 	}
-	log.Printf("Resovle conflicts not replaced")
+	log.Printf("Conflicts have been not replaced")
 	return false
 }
 
