@@ -42,7 +42,7 @@ For the blockchain node server running on port 5000, it needs to peer with the b
 
 For the blockchain node server running on port 5001, it needs to peer with the blockchain node server running on port 5000 (wait for the following array to be printed in the terminal)
 
-<img width="641" alt="image" src="https://github.com/thoaikhoa14402/BlockchainPow/assets/81000230/a881599a-54da-4c2e-b8b9-17b738ac0311">
+<img width="468" alt="image" src="https://github.com/thoaikhoa14402/BlockchainPow/assets/81000230/d2ff2a63-f8e0-4ca1-b474-3b8ef286d187">
 
 If both terminals print the array as shown above, it means we have successfully connected. **If the connection is not established, please reinitialize step 1**
 
