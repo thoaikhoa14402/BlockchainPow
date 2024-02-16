@@ -1,5 +1,8 @@
-# BlockchainPow
-Building Blockchain PoW from scratch with Golang
+# VIDEO DEMO
+**Link: https://youtu.be/I3eV-X-P5gA**
+
+# ABOUT
+Building Blockchain Proof Of Work from scratch with Golang
 
 # Build the program
 Firstly, we need to build two executable files: one for the blockchain node server and another for the client.
